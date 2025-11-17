@@ -2,9 +2,8 @@ name: FanSale Monitor
 
 on:
   schedule:
-    - cron: "*/10 * * * *"   # alle 10 Minuten (empfohlen)
-  workflow_dispatch:         # optional: manuelles Starten
-
+    - cron: "*/10 * * * *"   # alle 10 Minuten
+  workflow_dispatch:
 
 jobs:
   run-monitor:
@@ -23,7 +22,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y google-chrome-stable
 
-    - name: Install Python
+    - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
