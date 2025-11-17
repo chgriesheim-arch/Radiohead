@@ -33,4 +33,4 @@ jobs:
 
     - name: Run monitoring script
       run: |
-        python3 fansale_monitor.py
+        python3 $GITHUB_WORKSPACE/fansale_monitor.py
