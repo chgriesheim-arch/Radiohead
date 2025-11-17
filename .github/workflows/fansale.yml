@@ -1,0 +1,28 @@
+name: FanSale Monitor
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # alle 5 Minuten
+  workflow_dispatch:
+
+jobs:
+  run-monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.10"
+
+    - name: Install dependencies
+      run: pip install requests beautifulsoup4
+
+    - name: Run monitoring script
+      env:
+        TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+        CHAT_ID: ${{ secrets.CHAT_ID }}
+      run: python fansale_monitor.py
