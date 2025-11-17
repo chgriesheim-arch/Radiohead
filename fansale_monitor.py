@@ -36,14 +36,16 @@ def save_last_state(state):
     with open(LAST_STATE_FILE, "w") as f:
         json.dump(state, f)
 
-def fetch_fansale_selenium():
-    chrome_options = Options()
-    chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
 
-    driver = webdriver.Chrome(options=chrome_options)
+chrome_options = Options()
+chrome_options.add_argument("--headless=new")
+chrome_options.add_argument("--no-sandbox")
+chrome_options.add_argument("--disable-dev-shm-usage")
+
+driver = webdriver.Chrome(ChromeDriverManager().install(), options=chrome_options)
 
     try:
         driver.get(FANSALE_URL)
