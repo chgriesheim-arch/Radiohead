@@ -1,28 +1,50 @@
 name: FanSale Monitor
 
 on:
+  workflow_dispatch:
   schedule:
     - cron: "*/5 * * * *"   # alle 5 Minuten
-  workflow_dispatch:
 
 jobs:
   run-monitor:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.10"
+      - name: Install Chrome
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget gnupg unzip
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
 
-    - name: Install dependencies
-      run: pip install requests beautifulsoup4
+      - name: Install ChromeDriver
+        run: |
+          CHROME_VERSION=$(google-chrome --version | awk '{print $3}')
+          CHROME_DRIVER_VERSION=$(curl -s "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json" \
+            | grep -A 3 "$CHROME_VERSION" | grep linux64 | head -1 | sed 's/.*"url": "//;s/".*//')
+          wget -q "$CHROME_DRIVER_VERSION" -O chromedriver.zip
+          unzip chromedriver.zip -d chromedriver
+          sudo mv chromedriver/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver
+          sudo chmod +x /usr/local/bin/chromedriver
 
-    - name: Run monitoring script
-      env:
-        TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-        CHAT_ID: ${{ secrets.CHAT_ID }}
-      run: python fansale_monitor.py
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install selenium requests
+
+      - name: Run monitoring script
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python fansale_monitor.py
+
