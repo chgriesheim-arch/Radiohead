@@ -36,16 +36,14 @@ def save_last_state(state):
     with open(LAST_STATE_FILE, "w") as f:
         json.dump(state, f)
 
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
+def fetch_fansale_selenium():
+    chrome_options = Options()
+    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
 
-chrome_options = Options()
-chrome_options.add_argument("--headless=new")
-chrome_options.add_argument("--no-sandbox")
-chrome_options.add_argument("--disable-dev-shm-usage")
-
-driver = webdriver.Chrome(ChromeDriverManager().install(), options=chrome_options)
+    driver = webdriver.Chrome(options=chrome_options)
 
     try:
         driver.get(FANSALE_URL)
@@ -53,6 +51,7 @@ driver = webdriver.Chrome(ChromeDriverManager().install(), options=chrome_option
 
         tickets = []
         rows = driver.find_elements(By.CSS_SELECTOR, ".ticket-list-entry")
+
         for row in rows:
             try:
                 price = row.find_element(By.CSS_SELECTOR, ".price").text
@@ -62,10 +61,6 @@ driver = webdriver.Chrome(ChromeDriverManager().install(), options=chrome_option
                 pass
 
         return tickets
-
-    except Exception as e:
-        print("Selenium error:", e)
-        return []
 
     finally:
         driver.quit()
