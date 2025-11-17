@@ -1,31 +1,27 @@
 import os
 import time
 import json
+import requests
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-import requests
-
 
 FANSALE_URL = "https://www.fansale.de/tickets/all/radiohead/520"
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 LAST_STATE_FILE = "last_tickets.json"
 
-
 def send_telegram(msg: str):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         print("Telegram credentials missing")
         return
-
+    
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     data = {"chat_id": TELEGRAM_CHAT_ID, "text": msg}
-
     try:
         requests.post(url, data=data)
     except Exception as e:
         print("Telegram error:", e)
-
 
 def load_last_state():
     if not os.path.exists(LAST_STATE_FILE):
@@ -36,73 +32,54 @@ def load_last_state():
     except:
         return []
 
-
 def save_last_state(state):
     with open(LAST_STATE_FILE, "w") as f:
         json.dump(state, f)
 
+def fetch_fansale_selenium():
+    chrome_options = Options()
+    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
 
-def check_fansale():
-    options = Options()
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1920,1080")
-
-    driver = webdriver.Chrome(options=options)
+    driver = webdriver.Chrome(options=chrome_options)
 
     try:
         driver.get(FANSALE_URL)
         time.sleep(5)
 
-        offers = driver.find_elements(By.CSS_SELECTOR, "div.ticket-overview")
-
-        results = []
-        for offer in offers:
+        tickets = []
+        rows = driver.find_elements(By.CSS_SELECTOR, ".ticket-list-entry")
+        for row in rows:
             try:
-                title = offer.find_element(By.CSS_SELECTOR, ".ticket-title").text.strip()
-                price = offer.find_element(By.CSS_SELECTOR, ".price").text.strip()
-                link = offer.find_element(By.CSS_SELECTOR, "a").get_attribute("href")
-
-                results.append({
-                    "title": title,
-                    "price": price,
-                    "url": link
-                })
+                price = row.find_element(By.CSS_SELECTOR, ".price").text
+                block = row.find_element(By.CSS_SELECTOR, ".block").text
+                tickets.append({"price": price, "block": block})
             except:
-                continue
+                pass
 
-        return results
+        return tickets
+
+    except Exception as e:
+        print("Selenium error:", e)
+        return []
 
     finally:
         driver.quit()
 
-
 def main():
-    print("Checking FanSale...")
-    new_state = check_fansale()
-    old_state = load_last_state()
+    print("Fetching Fansale page via Selenium ...")
 
-    if new_state != old_state:
-        save_last_state(new_state)
+    new_tickets = fetch_fansale_selenium()
+    last_tickets = load_last_state()
 
-        if len(new_state) > 0:
-            msg = f"🎟️ Neue Radiohead-Tickets gefunden!\n\n"
-            for t in new_state:
-                msg += f"- {t['title']} – {t['price']}\n{t['url']}\n\n"
-        else:
-            msg = "❌ Tickets wieder ausverkauft."
-
-        send_telegram(msg)
-        print(msg)
+    if new_tickets != last_tickets:
+        print("Change detected!")
+        save_last_state(new_tickets)
+        send_telegram("Neue Tickets oder Änderungen auf Fansale!")
     else:
-        print("Keine Änderungen.")
-
-    print("Fertig.")
-
+        print("No changes detected.")
 
 if __name__ == "__main__":
-    while True:
-        main()
-        time.sleep(60)
+    main()
