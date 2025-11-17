@@ -1,68 +1,108 @@
+import os
 import time
+import json
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
 import requests
-from bs4 import BeautifulSoup
-from datetime import datetime
+
 
 FANSALE_URL = "https://www.fansale.de/tickets/all/radiohead/520"
-CHECK_INTERVAL = 60  # Sekunden
-
-MIN_TICKETS = 2
-MAX_TICKETS = 4
-DATES = ["08.12.2025", "09.12.2025", "11.12.2025", "12.12.2025"]
-
-# Telegram Token und Chat-ID aus Umgebungsvariablen
-import os
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+LAST_STATE_FILE = "last_tickets.json"
 
-known_offers = set()
 
-def telegram_notify(message: str):
+def send_telegram(msg: str):
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        print("Telegram credentials missing")
+        return
+
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": message
-    }
-    requests.post(url, json=payload)
+    data = {"chat_id": TELEGRAM_CHAT_ID, "text": msg}
+
+    try:
+        requests.post(url, data=data)
+    except Exception as e:
+        print("Telegram error:", e)
+
+
+def load_last_state():
+    if not os.path.exists(LAST_STATE_FILE):
+        return []
+    try:
+        with open(LAST_STATE_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return []
+
+
+def save_last_state(state):
+    with open(LAST_STATE_FILE, "w") as f:
+        json.dump(state, f)
 
 
 def check_fansale():
-    print(f"[{datetime.now()}] Checking FanSale…")
+    options = Options()
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1920,1080")
 
-    r = requests.get(FANSALE_URL, timeout=10)
-    soup = BeautifulSoup(r.text, "html.parser")
+    driver = webdriver.Chrome(options=options)
 
-    offers = soup.select(".article")
+    try:
+        driver.get(FANSALE_URL)
+        time.sleep(5)
 
-    new_hits = []
+        offers = driver.find_elements(By.CSS_SELECTOR, "div.ticket-overview")
 
-    for offer in offers:
-        text = offer.get_text(strip=True)
-        offer_id = hash(text)
+        results = []
+        for offer in offers:
+            try:
+                title = offer.find_element(By.CSS_SELECTOR, ".ticket-title").text.strip()
+                price = offer.find_element(By.CSS_SELECTOR, ".price").text.strip()
+                link = offer.find_element(By.CSS_SELECTOR, "a").get_attribute("href")
 
-        if any(date in text for date in DATES):
-            for n in range(MIN_TICKETS, MAX_TICKETS + 1):
-                if f"{n} Ticket" in text or f"{n} Tickets" in text:
-                    if offer_id not in known_offers:
-                        known_offers.add(offer_id)
-                        new_hits.append(text)
+                results.append({
+                    "title": title,
+                    "price": price,
+                    "url": link
+                })
+            except:
+                continue
 
-    return new_hits
+        return results
+
+    finally:
+        driver.quit()
 
 
 def main():
-    telegram_notify("FanSale Monitor gestartet (GitHub Actions).")
-    print("Monitor läuft…")
+    print("Checking FanSale...")
+    new_state = check_fansale()
+    old_state = load_last_state()
 
-    new = check_fansale()
-    if new:
-        message = "🎟️ **Neue Radiohead Tickets!**\n\n"
-        message += "\n\n".join(new)
-        message += f"\n\nLink: {FANSALE_URL}"
-        telegram_notify(message)
+    if new_state != old_state:
+        save_last_state(new_state)
+
+        if len(new_state) > 0:
+            msg = f"🎟️ Neue Radiohead-Tickets gefunden!\n\n"
+            for t in new_state:
+                msg += f"- {t['title']} – {t['price']}\n{t['url']}\n\n"
+        else:
+            msg = "❌ Tickets wieder ausverkauft."
+
+        send_telegram(msg)
+        print(msg)
     else:
-        print("Keine neuen Tickets.")
+        print("Keine Änderungen.")
+
+    print("Fertig.")
 
 
 if __name__ == "__main__":
-    main()
+    while True:
+        main()
+        time.sleep(60)
